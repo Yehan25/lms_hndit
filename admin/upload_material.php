@@ -71,66 +71,95 @@ function sanitize_upload_filename($name) {
     return $name ?: 'file';
 }
 
-// Handle upload
+// Handle one or many material files in a single submission.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!isset($_FILES['material_file'])) {
-        $msg = 'Upload failed: no file was received. The file may be larger than the PHP limit (' . ini_get('post_max_size') . ').';
+    if (!isset($_FILES['material_file']) || !is_array($_FILES['material_file']['name'])) {
+        $msg = 'Upload failed: no files were received. The files may be larger than the PHP limit (' . ini_get('post_max_size') . ').';
     } else {
-        $file = $_FILES['material_file'];
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            $msg = 'Upload failed: ' . upload_error_message($file['error']);
+        $post_course_id = intval($_POST['course_id'] ?? 0);
+        $titlePrefix = trim((string)($_POST['title'] ?? ''));
+        $material_type = ($_POST['material_type'] ?? '') === 'video' ? 'video' : 'document';
+        if ($current_role === 'admin') {
+            $stmtc = $conn->prepare("SELECT id FROM courses WHERE id = ?");
+            $stmtc->bind_param("i", $post_course_id);
         } else {
-            $post_course_id = intval($_POST['course_id']);
-            if ($current_role === 'admin') {
-                $stmtc = $conn->prepare("SELECT id FROM courses WHERE id = ?");
-                $stmtc->bind_param("i", $post_course_id);
-            } else {
-                $stmtc = $conn->prepare("SELECT id FROM courses WHERE id = ? AND lecturer_id = ?");
-                $stmtc->bind_param("ii", $post_course_id, $actor_id);
-            }
-            $stmtc->execute();
-            if (!$stmtc->get_result()->fetch_assoc()) {
-                $msg = "Invalid course selection.";
-            } else {
-                $title = trim($_POST['title']) ?: pathinfo($file['name'], PATHINFO_FILENAME);
-                $material_type = ($_POST['material_type'] === 'video') ? 'video' : 'document';
-                // Server-side validation: enforce 40MB for videos and allowed mime types
+            $stmtc = $conn->prepare("SELECT id FROM courses WHERE id = ? AND lecturer_id = ?");
+            $stmtc->bind_param("ii", $post_course_id, $actor_id);
+        }
+        $stmtc->execute();
+
+        if (!$stmtc->get_result()->fetch_assoc()) {
+            $msg = 'Invalid course selection.';
+        } else {
+            $target_dir = "../uploads/materials/";
+            ensure_upload_dir($target_dir);
+            $uploadedCount = 0;
+            $errors = [];
+            $fileCount = count($_FILES['material_file']['name']);
+            $insert = $conn->prepare("INSERT INTO materials (course_id, uploaded_by, uploaded_by_role, title, material_type, file_path) VALUES (?, ?, ?, ?, ?, ?)");
+
+            for ($index = 0; $index < $fileCount; $index++) {
+                $file = [
+                    'name' => $_FILES['material_file']['name'][$index],
+                    'type' => $_FILES['material_file']['type'][$index],
+                    'tmp_name' => $_FILES['material_file']['tmp_name'][$index],
+                    'error' => $_FILES['material_file']['error'][$index],
+                    'size' => $_FILES['material_file']['size'][$index],
+                ];
+                $fileLabel = pathinfo($file['name'], PATHINFO_FILENAME);
+
+                if ($file['error'] !== UPLOAD_ERR_OK) {
+                    $errors[] = $file['name'] . ': ' . upload_error_message($file['error']);
+                    continue;
+                }
                 if ($material_type === 'video') {
-                    if ($file['size'] > MAX_VIDEO_UPLOAD_BYTES) {
-                        $msg = 'Upload failed: video exceeds maximum allowed size of 40 MB.';
-                    }
                     $finfo = finfo_open(FILEINFO_MIME_TYPE);
                     $mime = finfo_file($finfo, $file['tmp_name']);
                     finfo_close($finfo);
-                    $allowedVideoMimes = ['video/mp4','video/webm','video/ogg'];
-                    if (!in_array($mime, $allowedVideoMimes, true)) {
-                        $msg = 'Upload failed: unsupported video format. Please upload MP4/WebM/OGG.';
+                    if ($file['size'] > MAX_VIDEO_UPLOAD_BYTES) {
+                        $errors[] = $file['name'] . ': video exceeds the maximum allowed size of 50 MB.';
+                        continue;
+                    }
+                    if (!in_array($mime, ['video/mp4', 'video/webm', 'video/ogg'], true)) {
+                        $errors[] = $file['name'] . ': unsupported video format. Please upload MP4, WebM or OGG.';
+                        continue;
                     }
                 }
-                if (empty($msg)) {
-                    $target_dir = "../uploads/materials/";
-                    ensure_upload_dir($target_dir);
-                    $baseName = sanitize_upload_filename($file['name']);
-                    $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                    $filename = time() . "_" . $baseName . ($extension ? "." . $extension : '');
-                    $target_path = $target_dir . $filename;
+                if (!is_uploaded_file($file['tmp_name'])) {
+                    $errors[] = $file['name'] . ': uploaded file is not valid.';
+                    continue;
+                }
 
-                    if (!is_uploaded_file($file['tmp_name'])) {
-                        $msg = 'Upload failed: Uploaded file is not valid.';
-                    } elseif (move_uploaded_file($file['tmp_name'], $target_path)) {
-                        $stmt2 = $conn->prepare("INSERT INTO materials (course_id, uploaded_by, uploaded_by_role, title, material_type, file_path) VALUES (?, ?, ?, ?, ?, ?)");
-                        $rel_path = "uploads/materials/" . $filename;
-                        $stmt2->bind_param("iissss", $post_course_id, $actor_id, $current_role, $title, $material_type, $rel_path);
-                        if ($stmt2->execute()) {
-                            header('Location: upload_material.php?course_id=' . $post_course_id . '&success=1');
-                            exit;
-                        } else {
-                            $msg = "Upload failed: could not save material record. " . $stmt2->error;
-                        }
-                    } else {
-                        $msg = 'Upload failed: could not move uploaded file to the uploads folder. Check folder permissions and php.ini settings.';
-                    }
+                $baseName = sanitize_upload_filename($file['name']);
+                $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                $filename = uniqid('', true) . "_" . $baseName . ($extension ? "." . $extension : '');
+                $target_path = $target_dir . $filename;
+                $title = $titlePrefix === '' ? $fileLabel : ($fileCount > 1 ? $titlePrefix . ' - ' . $fileLabel : $titlePrefix);
+
+                if (!move_uploaded_file($file['tmp_name'], $target_path)) {
+                    $errors[] = $file['name'] . ': could not move the file to the uploads folder.';
+                    continue;
                 }
+
+                $rel_path = "uploads/materials/" . $filename;
+                $insert->bind_param("iissss", $post_course_id, $actor_id, $current_role, $title, $material_type, $rel_path);
+                if ($insert->execute()) {
+                    $uploadedCount++;
+                } else {
+                    @unlink($target_path);
+                    $errors[] = $file['name'] . ': could not save the material record.';
+                }
+            }
+
+            if ($uploadedCount > 0) {
+                $msg = $uploadedCount . ' material' . ($uploadedCount === 1 ? '' : 's') . ' uploaded successfully.';
+            }
+            if (!empty($errors)) {
+                $msg .= ($msg !== '' ? '<br>' : '') . 'Some files were not uploaded:<br>' . implode('<br>', array_map('htmlspecialchars', $errors));
+            }
+            if ($uploadedCount > 0 && empty($errors)) {
+                header('Location: upload_material.php?course_id=' . $post_course_id . '&success=1');
+                exit;
             }
         }
     }
@@ -174,17 +203,18 @@ include '../includes/header.php';
                 </option>
             <?php endforeach; ?>
         </select>
-        <label>Title</label>
-        <input type="text" name="title" required>
+        <label>Title (optional)</label>
+        <input type="text" name="title" placeholder="Leave blank to use each filename">
         <label>Material Type</label>
         <select name="material_type" id="materialType">
             <option value="document">Document / File (PDF, DOCX, PPT, ZIP...)</option>
             <option value="video">Video (MP4)</option>
         </select>
-        <label>File</label>
-        <input type="file" name="material_file" id="materialFileInput" required>
-        <div class="form-help">Max upload size: <?php echo (MAX_VIDEO_UPLOAD_BYTES/1024/1024) . ' MB'; ?> (server: <?php echo htmlspecialchars($maxUploadSize); ?>). Select "Video" for MP4 upload.</div>
-        <button type="submit" class="btn">Upload</button>
+        <label>Files</label>
+        <input type="file" name="material_file[]" id="materialFileInput" multiple required>
+        <div id="selectedFiles" class="form-help">You can select multiple files. Leave the title blank to use each filename.</div>
+        <div class="form-help">Max upload size per video: <?php echo (MAX_VIDEO_UPLOAD_BYTES/1024/1024) . ' MB'; ?> (server: <?php echo htmlspecialchars($maxUploadSize); ?>). Select "Video" for MP4/WebM/OGG files.</div>
+        <button type="submit" class="btn">Upload Materials</button>
     </form>
     <?php endif; ?>
 </div>
@@ -217,6 +247,7 @@ include '../includes/header.php';
 (function(){
     const typeSelect = document.getElementById('materialType');
     const fileInput = document.getElementById('materialFileInput');
+    const selectedFiles = document.getElementById('selectedFiles');
     if (!typeSelect || !fileInput) return;
     const updateAccept = () => {
         if (typeSelect.value === 'video') {
@@ -225,6 +256,10 @@ include '../includes/header.php';
             fileInput.accept = '';
         }
     };
+    fileInput.addEventListener('change', () => {
+        const count = fileInput.files.length;
+        selectedFiles.textContent = count ? count + ' file' + (count === 1 ? '' : 's') + ' selected.' : 'You can select multiple files.';
+    });
     typeSelect.addEventListener('change', updateAccept);
     updateAccept();
 })();

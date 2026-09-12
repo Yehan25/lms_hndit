@@ -163,7 +163,7 @@ include '../includes/header.php';
                                     </div>
                                 </div>
                                 <div class="semester-course-actions">
-                                    <a href="upload_material.php?course_id=<?php echo $c['id']; ?>" class="btn btn-outline">Manage Content</a>
+                                    <a href="upload_material.php?course_id=<?php echo $c['id']; ?>" class="btn btn-outline">Manage / Bulk Upload</a>
                                 </div>
                             </div>
                         <?php endforeach; ?>
