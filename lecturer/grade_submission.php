@@ -29,7 +29,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sub['feedback'] = $feedback;
 }
 
-$pageTitle = 'Grade Submission';
+    $submission_url = '/lms_hndit/' . ltrim((string)$sub['file_path'], '/');
+    $submission_extension = strtolower(pathinfo((string)$sub['file_path'], PATHINFO_EXTENSION));
+    $is_pdf_submission = $submission_extension === 'pdf';
+    $is_office_submission = in_array($submission_extension, ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'], true);
+
+    $pageTitle = 'Grade Submission';
 include '../includes/header.php';
 ?>
 <h2>Grade Submission</h2>
@@ -48,7 +53,24 @@ include '../includes/header.php';
 <?php if ($sub['status'] === 'submitted' && $sub['file_path']): ?>
 <div class="card">
     <h3>Submitted File</h3>
-    <a href="/lms_hndit/<?php echo htmlspecialchars($sub['file_path']); ?>" target="_blank" class="btn btn-outline">Download Submission</a>
+    <div style="display:flex; flex-wrap:wrap; gap:10px;">
+        <a href="<?php echo htmlspecialchars($submission_url); ?>" target="_blank" rel="noopener" class="btn btn-outline">Open Submission</a>
+        <a href="<?php echo htmlspecialchars($submission_url); ?>" download class="btn btn-outline">Download Submission</a>
+    </div>
+    <?php if ($is_pdf_submission): ?>
+        <iframe
+            src="<?php echo htmlspecialchars($submission_url); ?>"
+            title="Student submitted PDF"
+            style="width:100%; height:650px; margin-top:16px; border:1px solid #d9dce5; border-radius:8px; background:#fff;"
+        ></iframe>
+    <?php elseif ($is_office_submission): ?>
+        <iframe
+            src="<?php echo htmlspecialchars(assignment_file_preview_url($sub['file_path'])); ?>"
+            title="Student submitted document"
+            style="width:100%; height:650px; margin-top:16px; border:1px solid #d9dce5; border-radius:8px; background:#fff;"
+        ></iframe>
+        <p style="color:var(--text-muted); font-size:13px; margin-top:8px;">If the Office preview does not load, use Download Submission.</p>
+    <?php endif; ?>
 </div>
 <?php elseif ($sub['status'] === 'absent'): ?>
 <div class="card">
@@ -65,5 +87,5 @@ include '../includes/header.php';
         <button type="submit" class="btn">Save Grade</button>
     </form>
 </div>
-<a href="view_submissions.php?assignment_id=<?php echo $sub['assignment_id']; ?>" class="btn">Back</a>
+<a href="/lms_hndit/lecturer/view_submissions.php?assignment_id=<?php echo (int)$sub['assignment_id']; ?>" class="btn btn-outline">Back to Submissions</a>
 <?php include '../includes/footer.php'; ?>

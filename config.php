@@ -21,8 +21,15 @@ if ($semesterCheck && $semesterCheck->num_rows === 0) {
     $conn->query("ALTER TABLE courses ADD COLUMN semester VARCHAR(50) NULL AFTER description");
 }
 
+$assignmentFileCol = $conn->query("SHOW COLUMNS FROM assignments LIKE 'file_path'");
+if ($assignmentFileCol && $assignmentFileCol->num_rows === 0) {
+    $conn->query("ALTER TABLE assignments ADD COLUMN file_path VARCHAR(255) NULL AFTER due_date");
+}
+
 // App limit for video uploads (50 MB)
 define('MAX_VIDEO_UPLOAD_BYTES', 50 * 1024 * 1024);
+
+define('MAX_ASSIGNMENT_FILE_BYTES', 20 * 1024 * 1024);
 
 function php_size_to_bytes($val) {
     $val = trim($val);
@@ -112,5 +119,49 @@ function ensure_upload_dir($path) {
     if (!is_dir($path)) {
         mkdir($path, 0777, true);
     }
+}
+
+function delete_submission_file($file_path) {
+    $relative_path = ltrim((string)$file_path, '/\\');
+    if ($relative_path === '' || strpos($relative_path, 'uploads/submissions/') !== 0) {
+        return;
+    }
+
+    $physical_path = __DIR__ . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relative_path);
+    if (is_file($physical_path)) {
+        unlink($physical_path);
+    }
+}
+
+function sanitize_upload_filename($name) {
+    $name = pathinfo($name, PATHINFO_FILENAME);
+    $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
+    return $name ?: 'file';
+}
+
+function build_public_file_url($file_path) {
+    $normalized = ltrim((string)$file_path, '/');
+    if ($normalized === '') {
+        return '';
+    }
+    if (preg_match('#^https?://#i', $normalized)) {
+        return $normalized;
+    }
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return $scheme . '://' . $host . '/lms_hndit/' . $normalized;
+}
+
+function assignment_file_preview_url($file_path) {
+    $publicUrl = build_public_file_url($file_path);
+    if ($publicUrl === '') {
+        return '';
+    }
+    return 'https://docs.google.com/gview?embedded=true&url=' . urlencode($publicUrl);
+}
+
+function assignment_supports_inline_preview($file_path) {
+    $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+    return in_array($ext, ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'], true);
 }
 ?>

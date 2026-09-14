@@ -59,7 +59,21 @@ include '../includes/header.php';
         <?php while ($a = $assignments->fetch_assoc()): ?>
         <tr>
             <td class="course-code"><?php echo htmlspecialchars($a['course_code']); ?></td>
-            <td><?php echo htmlspecialchars($a['title']); ?></td>
+            <td>
+                <?php echo htmlspecialchars($a['title']); ?>
+                <?php if (trim((string)$a['description']) !== ''): ?>
+                    <div style="margin-top:6px; color:var(--text, #1a2236) !important; font-size:13px; line-height:1.55; white-space:pre-wrap;">
+                        <?php echo htmlspecialchars($a['description']); ?>
+                    </div>
+                <?php endif; ?>
+                <?php if (!empty($a['file_path'])): ?>
+                    <div style="margin-top:6px; color:var(--text-muted); font-size:12px;">
+                        <a href="../assignment_preview.php?assignment_id=<?php echo (int)$a['id']; ?>" target="_blank" rel="noopener">
+                            📎 View <?php echo htmlspecialchars(basename($a['file_path'])); ?>
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </td>
             <td><?php echo $a['due_date']; ?></td>
             <td>
                 <?php if ($a['submission_id'] === null): ?>
@@ -78,7 +92,7 @@ include '../includes/header.php';
                     -
                 <?php else: ?>
                     <a href="submit_assignment.php?assignment_id=<?php echo $a['id']; ?>" class="btn">
-                        <?php echo $a['submission_id'] !== null ? 'View / Resubmit' : 'Submit'; ?>
+                        <?php echo $a['submission_id'] !== null ? 'View / Resubmit' : 'View & Submit'; ?>
                     </a>
                 <?php endif; ?>
             </td>

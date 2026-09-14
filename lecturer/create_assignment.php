@@ -40,6 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_assignment']))
         if ($assignment) {
             $can_delete = $current_role === 'admin' || ($current_role === 'lecturer' && ((int)$assignment['lecturer_id'] === $current_user_id));
             if ($can_delete) {
+                $file_path = $assignment['file_path'] ?? null;
+                if (!empty($file_path)) {
+                    $physical_path = dirname(__DIR__) . '/' . ltrim($file_path, '/');
+                    if (file_exists($physical_path)) {
+                        @unlink($physical_path);
+                    }
+                }
                 $stmt2 = $conn->prepare("DELETE FROM assignments WHERE id = ?");
                 $stmt2->bind_param("i", $delete_assignment_id);
                 $stmt2->execute();
@@ -69,12 +76,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_assignment'])) {
         $title = trim($_POST['title']);
         $desc = trim($_POST['description']);
         $due = $_POST['due_date'];
+        $assignment_file_path = null;
 
-        $stmt2 = $conn->prepare("INSERT INTO assignments (course_id, created_by, created_by_role, title, description, due_date) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt2->bind_param("iissss", $post_course_id, $current_user_id, $current_role, $title, $desc, $due);
-        $stmt2->execute();
-        $msg = "Assignment created.";
-        $course_id = $post_course_id;
+        if (isset($_FILES['assignment_file']) && !is_array($_FILES['assignment_file']['name']) && $_FILES['assignment_file']['name'] !== '') {
+            $file = [
+                'name' => $_FILES['assignment_file']['name'],
+                'tmp_name' => $_FILES['assignment_file']['tmp_name'],
+                'error' => $_FILES['assignment_file']['error'],
+                'size' => $_FILES['assignment_file']['size'],
+            ];
+
+            if ($file['error'] !== UPLOAD_ERR_NO_FILE && $file['size'] > 0) {
+                if ($file['error'] !== UPLOAD_ERR_OK) {
+                    $msg = 'Assignment file upload failed. Please try again.';
+                } elseif ($file['size'] > MAX_ASSIGNMENT_FILE_BYTES) {
+                    $msg = 'The assignment file is too large. Maximum allowed size is 20 MB.';
+                } else {
+                    $allowed = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
+                    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                    if (!in_array($ext, $allowed, true)) {
+                        $msg = 'Unsupported file type. Please upload PDF, DOC, DOCX, PPT, PPTX, XLS or XLSX files only.';
+                    } else {
+                        ensure_upload_dir('../uploads/assignments/');
+                        $safeName = sanitize_upload_filename($file['name']);
+                        $target_name = uniqid('', true) . '_' . $safeName . ($ext ? '.' . $ext : '');
+                        $target_path = '../uploads/assignments/' . $target_name;
+                        if (move_uploaded_file($file['tmp_name'], $target_path)) {
+                            $assignment_file_path = 'uploads/assignments/' . $target_name;
+                        } else {
+                            $msg = 'Assignment file could not be saved.';
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($msg === '') {
+            if ($assignment_file_path !== null) {
+                $stmt2 = $conn->prepare("INSERT INTO assignments (course_id, created_by, created_by_role, title, description, due_date, file_path) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt2->bind_param("iisssss", $post_course_id, $current_user_id, $current_role, $title, $desc, $due, $assignment_file_path);
+            } else {
+                $stmt2 = $conn->prepare("INSERT INTO assignments (course_id, created_by, created_by_role, title, description, due_date) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt2->bind_param("iissss", $post_course_id, $current_user_id, $current_role, $title, $desc, $due);
+            }
+            $stmt2->execute();
+            $msg = "Assignment created.";
+            $course_id = $post_course_id;
+        }
     }
 }
 
@@ -106,7 +154,7 @@ include '../includes/header.php';
     <?php if (empty($myCourseList)): ?>
         <div class="empty-state">You have no assigned courses yet. Contact your administrator.</div>
     <?php else: ?>
-    <form method="POST">
+    <form method="POST" enctype="multipart/form-data">
         <label>Course</label>
         <select name="course_id" required>
             <?php foreach ($myCourseList as $c): ?>
@@ -119,6 +167,9 @@ include '../includes/header.php';
         <input type="text" name="title" required>
         <label>Description</label>
         <textarea name="description" rows="3"></textarea>
+        <label>Assignment File (PDF, DOCX, PPTX, XLSX)</label>
+        <input type="file" name="assignment_file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <div class="form-help">Optional. Maximum size: 20 MB.</div>
         <label>Due Date</label>
         <input type="datetime-local" name="due_date" required>
         <button type="submit" name="add_assignment" class="btn">Create Assignment</button>
@@ -132,7 +183,17 @@ include '../includes/header.php';
         <tr><th>Title</th><?php echo $course ? '' : '<th>Course</th>'; ?><th>Due Date</th><th>Action</th></tr>
         <?php while ($a = $assignments->fetch_assoc()): ?>
         <tr>
-            <td><?php echo htmlspecialchars($a['title']); ?></td>
+            <td>
+                <?php echo htmlspecialchars($a['title']); ?>
+                <?php if (!empty($a['file_path'])): ?>
+                    <div style="margin-top:6px;">
+                        <?php if (assignment_supports_inline_preview($a['file_path'])): ?>
+                            <a href="../assignment_preview.php?assignment_id=<?php echo (int)$a['id']; ?>" target="_blank" rel="noopener" class="btn btn-outline">View File</a>
+                        <?php endif; ?>
+                        <a href="/lms_hndit/<?php echo htmlspecialchars($a['file_path']); ?>" target="_blank" class="btn btn-outline">Download</a>
+                    </div>
+                <?php endif; ?>
+            </td>
             <?php if (!$course): ?><td class="course-code"><?php echo htmlspecialchars($a['course_code']); ?></td><?php endif; ?>
             <td><?php echo $a['due_date']; ?></td>
             <td>

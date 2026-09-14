@@ -54,7 +54,7 @@ include '../includes/header.php';
             <td><?php echo $s['submitted_at'] ? $s['submitted_at'] : '-'; ?></td>
             <td>
                 <?php if ($s['status'] === 'submitted' && $s['file_path']): ?>
-                    <a href="/lms_hndit/<?php echo htmlspecialchars($s['file_path']); ?>" target="_blank">Download</a>
+                    <a href="grade_submission.php?id=<?php echo (int)$s['submission_id']; ?>" class="btn btn-outline">View Submission</a>
                 <?php else: ?>
                     -
                 <?php endif; ?>
@@ -62,7 +62,7 @@ include '../includes/header.php';
             <td><?php echo htmlspecialchars($s['grade'] ?? 'Not graded'); ?></td>
             <td>
                 <?php if ($s['submission_id'] !== null): ?>
-                    <a href="grade_submission.php?id=<?php echo $s['submission_id']; ?>" class="btn">Grade</a>
+                    <a href="grade_submission.php?id=<?php echo (int)$s['submission_id']; ?>" class="btn">View / Grade</a>
                 <?php else: ?>
                     <a href="mark_absent.php?assignment_id=<?php echo $assignment_id; ?>&student_id=<?php echo $s['student_id']; ?>"
                        class="btn btn-danger" onclick="return confirm('Mark <?php echo htmlspecialchars($s['student_name'], ENT_QUOTES); ?> as absent for this assignment?')">Mark Absent</a>

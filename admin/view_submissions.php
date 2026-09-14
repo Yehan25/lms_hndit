@@ -14,6 +14,21 @@ $stmt->execute();
 $assignment = $stmt->get_result()->fetch_assoc();
 if (!$assignment) { die("Assignment not found."); }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_submission'])) {
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    $delete_stmt = $conn->prepare("SELECT id, file_path FROM submissions WHERE id = ? AND assignment_id = ?");
+    $delete_stmt->bind_param("ii", $submission_id, $assignment_id);
+    $delete_stmt->execute();
+    $submission_to_delete = $delete_stmt->get_result()->fetch_assoc();
+
+    if ($submission_to_delete) {
+        delete_submission_file($submission_to_delete['file_path']);
+        $remove_stmt = $conn->prepare("DELETE FROM submissions WHERE id = ? AND assignment_id = ?");
+        $remove_stmt->bind_param("ii", $submission_id, $assignment_id);
+        $remove_stmt->execute();
+    }
+}
+
 $roster = $conn->query("
     SELECT u.id AS student_id, u.name AS student_name, u.reg_no,
            s.id AS submission_id, s.file_path, s.status, s.submitted_at, s.grade, s.feedback
@@ -61,6 +76,12 @@ include '../includes/header.php';
             <td>
                 <?php if ($s['submission_id'] !== null): ?>
                     <a href="grade_submission.php?id=<?php echo $s['submission_id']; ?>" class="btn">Grade</a>
+                    <?php if ($s['status'] === 'submitted'): ?>
+                        <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this student submission?');">
+                            <input type="hidden" name="submission_id" value="<?php echo (int)$s['submission_id']; ?>">
+                            <button type="submit" name="delete_submission" value="1" class="btn btn-danger">Delete</button>
+                        </form>
+                    <?php endif; ?>
                 <?php else: ?>
                     <a href="mark_absent.php?assignment_id=<?php echo $assignment_id; ?>&student_id=<?php echo $s['student_id']; ?>"
                        class="btn btn-danger" onclick="return confirm('Mark <?php echo htmlspecialchars($s['student_name'], ENT_QUOTES); ?> as absent for this assignment?')">Mark Absent</a>

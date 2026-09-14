@@ -24,6 +24,22 @@ $stmt2->bind_param("ii", $assignment_id, $student_id);
 $stmt2->execute();
 $submission = $stmt2->get_result()->fetch_assoc();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_submission'])) {
+    if ($submission && $submission['status'] === 'submitted') {
+        delete_submission_file($submission['file_path']);
+        $delete_stmt = $conn->prepare("DELETE FROM submissions WHERE id = ? AND assignment_id = ? AND student_id = ?");
+        $delete_stmt->bind_param("iii", $submission['id'], $assignment_id, $student_id);
+        $delete_stmt->execute();
+        $msg = $delete_stmt->affected_rows > 0
+            ? 'Your submission was deleted. You can submit a new file.'
+            : 'The submission could not be deleted. Please try again.';
+        $stmt2->execute();
+        $submission = $stmt2->get_result()->fetch_assoc();
+    } else {
+        $msg = 'Only a submitted assignment can be deleted.';
+    }
+}
+
 if ($submission && $submission['status'] === 'absent') {
     // Absent students cannot submit
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['submission_file'])) {
@@ -65,7 +81,42 @@ include '../includes/header.php';
 
 <div class="card">
     <h3>Assignment Description</h3>
-    <p><?php echo nl2br(htmlspecialchars($assignment['description'])); ?></p>
+    <p style="color:var(--text) !important; font-size:14px; line-height:1.7; white-space:pre-wrap;"><?php echo htmlspecialchars($assignment['description']); ?></p>
+    <?php if (!empty($assignment['file_path'])): ?>
+        <?php
+            $assignment_file_url = '/lms_hndit/' . ltrim($assignment['file_path'], '/');
+            $assignment_file_ext = strtolower(pathinfo($assignment['file_path'], PATHINFO_EXTENSION));
+            $assignment_file_name = basename($assignment['file_path']);
+        ?>
+        <div style="margin-top:18px; padding:16px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:10px;">
+            <h4 style="margin:0 0 8px;">Assignment File</h4>
+            <p style="margin:0 0 12px; color:var(--text-muted);">
+                <?php echo htmlspecialchars($assignment_file_name); ?>
+                <span style="text-transform:uppercase; font-size:12px;">(<?php echo htmlspecialchars($assignment_file_ext); ?>)</span>
+            </p>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                <a href="../assignment_preview.php?assignment_id=<?php echo (int)$assignment_id; ?>" target="_blank" rel="noopener" class="btn btn-outline">View Assignment File</a>
+                <a href="<?php echo htmlspecialchars($assignment_file_url); ?>" download class="btn btn-outline">Download File</a>
+            </div>
+            <?php if ($assignment_file_ext === 'pdf'): ?>
+                <div style="margin-top:16px;">
+                    <p style="margin:0 0 8px; font-weight:600;">Read the assignment here before submitting:</p>
+                    <iframe
+                        src="<?php echo htmlspecialchars($assignment_file_url); ?>"
+                        title="Assignment PDF"
+                        style="width:100%; height:650px; border:1px solid #d9dce5; border-radius:8px; background:#fff;"
+                    ></iframe>
+                </div>
+            <?php elseif (in_array($assignment_file_ext, ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'], true)): ?>
+                <p style="margin:14px 0 0; color:var(--text-muted); font-size:13px;">
+                    This Office document is ready to open or download. If your browser cannot display it directly, use
+                    <strong>Download File</strong> and open it with Microsoft Office or LibreOffice.
+                </p>
+            <?php endif; ?>
+        </div>
+    <?php else: ?>
+        <div class="empty-state" style="margin-top:12px;">No assignment file was attached.</div>
+    <?php endif; ?>
 </div>
 
 <?php if ($submission && $submission['status'] === 'absent'): ?>
@@ -87,6 +138,9 @@ include '../includes/header.php';
         <h3>Your Submission</h3>
         <p><strong>Submitted:</strong> <?php echo $submission['submitted_at']; ?></p>
         <p><a href="/lms_hndit/<?php echo htmlspecialchars($submission['file_path']); ?>" target="_blank" class="btn btn-outline">Download My Submission</a></p>
+        <form method="POST" style="display:inline;" onsubmit="return confirm('Delete your submitted assignment?');">
+            <button type="submit" name="delete_submission" value="1" class="btn btn-danger">Delete My Submission</button>
+        </form>
         <p><strong>Grade:</strong> <?php echo htmlspecialchars($submission['grade'] ?? 'Not graded yet'); ?></p>
         <?php if (!empty($submission['feedback'])): ?>
             <p><strong>Feedback:</strong><br><?php echo nl2br(htmlspecialchars($submission['feedback'])); ?></p>

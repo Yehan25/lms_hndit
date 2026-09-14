@@ -65,12 +65,6 @@ function upload_error_message($code) {
     };
 }
 
-function sanitize_upload_filename($name) {
-    $name = pathinfo($name, PATHINFO_FILENAME);
-    $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
-    return $name ?: 'file';
-}
-
 // Handle one or many material files in a single submission.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_FILES['material_file']) || !is_array($_FILES['material_file']['name'])) {
