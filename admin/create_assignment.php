@@ -5,6 +5,9 @@ require_any_role(['admin', 'lecturer']);
 $current_role = $_SESSION['role'];
 $actor_id = (int)$_SESSION['user_id'];
 $course_id = intval($_GET['course_id'] ?? 0);
+$searchTerm = trim($_GET['search'] ?? '');
+$filterCourseId = intval($_GET['filter_course_id'] ?? 0);
+$dueFilter = $_GET['due_filter'] ?? '';
 $msg = '';
 
 if ($current_role === 'admin') {
@@ -112,21 +115,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_assignment'])) {
     }
 }
 
-if ($course_id > 0) {
-    if ($current_role === 'admin') {
-        $assignments = $conn->query("SELECT a.*, c.course_code FROM assignments a JOIN courses c ON a.course_id = c.id WHERE a.course_id = $course_id ORDER BY a.due_date DESC");
-    } else {
-        $idList = count($allCourseList) ? implode(',', array_map(fn($c) => intval($c['id']), $allCourseList)) : '0';
-        $assignments = $conn->query("SELECT a.*, c.course_code FROM assignments a JOIN courses c ON a.course_id = c.id WHERE a.course_id = $course_id AND a.course_id IN ($idList) ORDER BY a.due_date DESC");
-    }
-} else {
-    if ($current_role === 'admin') {
-        $assignments = $conn->query("SELECT a.*, c.course_code FROM assignments a JOIN courses c ON a.course_id = c.id ORDER BY a.due_date DESC");
-    } else {
-        $idList = count($allCourseList) ? implode(',', array_map(fn($c) => intval($c['id']), $allCourseList)) : '0';
-        $assignments = $conn->query("SELECT a.*, c.course_code FROM assignments a JOIN courses c ON a.course_id = c.id WHERE a.course_id IN ($idList) ORDER BY a.due_date DESC");
-    }
+$assignmentWhere = [];
+if ($current_role === 'lecturer') {
+    $idList = count($allCourseList) ? implode(',', array_map(fn($c) => intval($c['id']), $allCourseList)) : '0';
+    $assignmentWhere[] = "a.course_id IN ($idList)";
 }
+if ($course_id > 0 && $filterCourseId === 0) $filterCourseId = $course_id;
+if ($filterCourseId > 0) $assignmentWhere[] = "a.course_id = $filterCourseId";
+if ($searchTerm !== '') {
+    $safeSearch = $conn->real_escape_string($searchTerm);
+    $assignmentWhere[] = "(a.title LIKE '%$safeSearch%' OR a.description LIKE '%$safeSearch%' OR c.course_code LIKE '%$safeSearch%' OR c.course_name LIKE '%$safeSearch%')";
+}
+if ($dueFilter === 'upcoming') $assignmentWhere[] = "a.due_date >= NOW()";
+if ($dueFilter === 'past') $assignmentWhere[] = "a.due_date < NOW()";
+$assignmentWhereSql = count($assignmentWhere) ? 'WHERE ' . implode(' AND ', $assignmentWhere) : '';
+$assignments = $conn->query("SELECT a.*, c.course_code FROM assignments a JOIN courses c ON a.course_id = c.id $assignmentWhereSql ORDER BY a.due_date DESC");
 
 $pageTitle = 'Assignments';
 $pageEyebrow = ucfirst($current_role);
@@ -166,6 +169,33 @@ include '../includes/header.php';
 
 <div class="card">
     <h3>All Assignments</h3>
+    <form method="GET" class="filters-bar">
+        <div class="filter-field">
+            <label for="assignmentSearch">Search</label>
+            <input type="text" id="assignmentSearch" name="search" placeholder="Title, description or course" value="<?php echo htmlspecialchars($searchTerm); ?>">
+        </div>
+        <div class="filter-field">
+            <label for="assignmentCourse">Course</label>
+            <select id="assignmentCourse" name="filter_course_id">
+                <option value="">All Courses</option>
+                <?php foreach ($allCourseList as $c): ?>
+                    <option value="<?php echo (int)$c['id']; ?>" <?php echo $filterCourseId === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['course_code']); ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="assignmentDue">Due date</label>
+            <select id="assignmentDue" name="due_filter">
+                <option value="">All</option>
+                <option value="upcoming" <?php echo $dueFilter === 'upcoming' ? 'selected' : ''; ?>>Upcoming</option>
+                <option value="past" <?php echo $dueFilter === 'past' ? 'selected' : ''; ?>>Past</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn">Filter</button>
+            <a href="create_assignment.php" class="btn btn-outline">Reset</a>
+        </div>
+    </form>
     <table>
         <tr><th>Title</th><th>Course</th><th>Due Date</th><th>Action</th></tr>
         <?php while ($a = $assignments->fetch_assoc()): ?>
@@ -188,7 +218,7 @@ include '../includes/header.php';
                 <form method="POST" onsubmit="return confirm('Delete this assignment?');" style="display:inline;">
                     <input type="hidden" name="delete_assignment" value="1">
                     <input type="hidden" name="assignment_id" value="<?php echo (int)$a['id']; ?>">
-                    <button type="submit" class="btn">Delete</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
                 </form>
             </td>
         </tr>

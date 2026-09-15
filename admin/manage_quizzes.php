@@ -4,6 +4,9 @@ require_role('admin');
 
 $admin_id = $_SESSION['user_id'];
 $course_id = intval($_GET['course_id'] ?? 0);
+$searchTerm = trim($_GET['search'] ?? '');
+$filterCourseId = intval($_GET['filter_course_id'] ?? 0);
+$dueFilter = $_GET['due_filter'] ?? '';
 $msg = '';
 
 $allCourses = $conn->query("SELECT id, course_code, course_name FROM courses ORDER BY course_code");
@@ -26,18 +29,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_quiz'])) {
     exit();
 }
 
-if (isset($_GET['delete'])) {
-    $qid = intval($_GET['delete']);
-    $conn->query("DELETE FROM quizzes WHERE id = $qid");
-    header("Location: manage_quizzes.php");
-    exit();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_quiz'])) {
+    $qid = intval($_POST['quiz_id'] ?? 0);
+    if ($qid > 0) {
+        $stmt = $conn->prepare("DELETE FROM quizzes WHERE id = ?");
+        $stmt->bind_param("i", $qid);
+        $stmt->execute();
+        $msg = "Quiz deleted successfully.";
+    }
 }
 
-if ($course_id > 0) {
-    $quizzes = $conn->query("SELECT q.*, c.course_code FROM quizzes q JOIN courses c ON q.course_id = c.id WHERE q.course_id = $course_id ORDER BY q.due_date DESC");
-} else {
-    $quizzes = $conn->query("SELECT q.*, c.course_code FROM quizzes q JOIN courses c ON q.course_id = c.id ORDER BY q.due_date DESC");
+$quizWhere = [];
+if ($course_id > 0 && $filterCourseId === 0) $filterCourseId = $course_id;
+if ($filterCourseId > 0) $quizWhere[] = "q.course_id = $filterCourseId";
+if ($searchTerm !== '') {
+    $safeSearch = $conn->real_escape_string($searchTerm);
+    $quizWhere[] = "(q.title LIKE '%$safeSearch%' OR q.description LIKE '%$safeSearch%' OR c.course_code LIKE '%$safeSearch%' OR c.course_name LIKE '%$safeSearch%')";
 }
+if ($dueFilter === 'upcoming') $quizWhere[] = "q.due_date >= NOW()";
+if ($dueFilter === 'past') $quizWhere[] = "q.due_date < NOW()";
+$quizWhereSql = count($quizWhere) ? 'WHERE ' . implode(' AND ', $quizWhere) : '';
+$quizzes = $conn->query("SELECT q.*, c.course_code FROM quizzes q JOIN courses c ON q.course_id = c.id $quizWhereSql ORDER BY q.due_date DESC");
 
 $pageTitle = 'Quizzes';
 $pageEyebrow = 'Admin';
@@ -74,6 +86,33 @@ include '../includes/header.php';
 
 <div class="card">
     <h3>All Quizzes</h3>
+    <form method="GET" class="filters-bar">
+        <div class="filter-field">
+            <label for="quizSearch">Search</label>
+            <input type="text" id="quizSearch" name="search" placeholder="Title, description or course" value="<?php echo htmlspecialchars($searchTerm); ?>">
+        </div>
+        <div class="filter-field">
+            <label for="quizCourse">Course</label>
+            <select id="quizCourse" name="filter_course_id">
+                <option value="">All Courses</option>
+                <?php foreach ($allCourseList as $c): ?>
+                    <option value="<?php echo (int)$c['id']; ?>" <?php echo $filterCourseId === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['course_code']); ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="quizDue">Due date</label>
+            <select id="quizDue" name="due_filter">
+                <option value="">All</option>
+                <option value="upcoming" <?php echo $dueFilter === 'upcoming' ? 'selected' : ''; ?>>Upcoming</option>
+                <option value="past" <?php echo $dueFilter === 'past' ? 'selected' : ''; ?>>Past</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn">Filter</button>
+            <a href="manage_quizzes.php" class="btn btn-outline">Reset</a>
+        </div>
+    </form>
     <table>
         <tr><th>Title</th><th>Course</th><th>Due Date</th><th>Questions</th><th>Actions</th></tr>
         <?php while ($q = $quizzes->fetch_assoc()):
@@ -87,7 +126,11 @@ include '../includes/header.php';
             <td>
                 <a href="quiz_questions.php?quiz_id=<?php echo $q['id']; ?>" class="btn btn-outline">Questions</a>
                 <a href="view_quiz_results.php?quiz_id=<?php echo $q['id']; ?>" class="btn">Results</a>
-                <a href="?delete=<?php echo $q['id']; ?>" class="btn btn-danger" onclick="return confirm('Delete this quiz and all its questions/results?')">Delete</a>
+                <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this quiz and all its questions/results?');">
+                    <input type="hidden" name="delete_quiz" value="1">
+                    <input type="hidden" name="quiz_id" value="<?php echo (int)$q['id']; ?>">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
             </td>
         </tr>
         <?php endwhile; ?>
