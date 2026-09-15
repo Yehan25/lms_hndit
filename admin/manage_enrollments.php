@@ -3,6 +3,8 @@ require_once '../config.php';
 require_role('admin');
 
 $msg = '';
+$searchTerm = trim((string)($_GET['search'] ?? ''));
+$selectedCourseId = intval($_GET['course_id'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enroll_student'])) {
     $student_id = intval($_POST['student_id']);
@@ -130,7 +132,41 @@ while ($course = $coursesResult->fetch_assoc()) {
     $courses[] = $course;
 }
 
-$enrollments = $conn->query("SELECT e.id, s.name AS student_name, s.reg_no, c.course_code, c.course_name FROM enrollments e JOIN users s ON e.student_id = s.id JOIN courses c ON e.course_id = c.id ORDER BY s.name, c.course_code");
+$enrollmentSql = "SELECT e.id, s.name AS student_name, s.reg_no, c.course_code, c.course_name
+    FROM enrollments e
+    JOIN users s ON e.student_id = s.id
+    JOIN courses c ON e.course_id = c.id
+    WHERE 1=1";
+$enrollmentTypes = '';
+$enrollmentParams = [];
+
+if ($searchTerm !== '') {
+    $searchPattern = '%' . $searchTerm . '%';
+    $enrollmentSql .= " AND (s.name LIKE ? OR s.reg_no LIKE ? OR c.course_code LIKE ? OR c.course_name LIKE ?)";
+    $enrollmentTypes .= 'ssss';
+    $enrollmentParams[] = $searchPattern;
+    $enrollmentParams[] = $searchPattern;
+    $enrollmentParams[] = $searchPattern;
+    $enrollmentParams[] = $searchPattern;
+}
+
+if ($selectedCourseId > 0) {
+    $enrollmentSql .= " AND c.id = ?";
+    $enrollmentTypes .= 'i';
+    $enrollmentParams[] = $selectedCourseId;
+}
+
+$enrollmentSql .= " ORDER BY s.name, c.course_code";
+$enrollmentStmt = $conn->prepare($enrollmentSql);
+if (!empty($enrollmentParams)) {
+    $bindValues = [$enrollmentTypes];
+    foreach ($enrollmentParams as $key => $value) {
+        $bindValues[] = &$enrollmentParams[$key];
+    }
+    call_user_func_array([$enrollmentStmt, 'bind_param'], $bindValues);
+}
+$enrollmentStmt->execute();
+$enrollments = $enrollmentStmt->get_result();
 
 $pageTitle = 'Manage Enrollments';
 include '../includes/header.php';
@@ -224,6 +260,38 @@ include '../includes/header.php';
 
 <div class="card">
     <h3>Current Enrollments</h3>
+    <form method="GET" class="filters-bar">
+        <div class="filter-field">
+            <label for="enrollment-search">Search enrollments</label>
+            <input
+                type="search"
+                id="enrollment-search"
+                name="search"
+                value="<?php echo htmlspecialchars($searchTerm); ?>"
+                placeholder="Student name, registration no. or course"
+            >
+        </div>
+        <div class="filter-field">
+            <label for="enrollment-course">Filter by course</label>
+            <select id="enrollment-course" name="course_id">
+                <option value="0">All Courses</option>
+                <?php foreach ($courses as $course): ?>
+                    <option value="<?php echo intval($course['id']); ?>" <?php echo $selectedCourseId === intval($course['id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($course['course_code'] . ' - ' . $course['course_name']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn">Search / Filter</button>
+            <?php if ($searchTerm !== '' || $selectedCourseId > 0): ?>
+                <a href="manage_enrollments.php" class="btn btn-outline">Clear</a>
+            <?php endif; ?>
+        </div>
+    </form>
+    <p class="table-meta">
+        <?php echo $enrollments->num_rows; ?> enrollment<?php echo $enrollments->num_rows === 1 ? '' : 's'; ?> found
+    </p>
     <table>
         <tr><th>Student</th><th>Registration No.</th><th>Course</th><th>Action</th></tr>
         <?php while ($row = $enrollments->fetch_assoc()): ?>
@@ -241,7 +309,11 @@ include '../includes/header.php';
         <?php endwhile; ?>
     </table>
     <?php if ($enrollments->num_rows === 0): ?>
-        <div class="empty-state">No enrollments have been created yet.</div>
+        <div class="empty-state">
+            <?php echo ($searchTerm !== '' || $selectedCourseId > 0)
+                ? 'No enrollments match the selected search or filter.'
+                : 'No enrollments have been created yet.'; ?>
+        </div>
     <?php endif; ?>
 </div>
 

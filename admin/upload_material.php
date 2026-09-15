@@ -5,6 +5,11 @@ require_any_role(['admin', 'lecturer']);
 $current_role = $_SESSION['role'];
 $actor_id = (int)$_SESSION['user_id'];
 $course_id = intval($_GET['course_id'] ?? 0);
+$selectedSemester = trim((string)($_GET['semester'] ?? $_POST['semester'] ?? ''));
+$searchTerm = trim((string)($_GET['search'] ?? $_POST['search'] ?? ''));
+$selectedType = in_array(($_GET['material_type_filter'] ?? $_POST['material_type_filter'] ?? ''), ['document', 'video'], true)
+    ? ($_GET['material_type_filter'] ?? $_POST['material_type_filter'])
+    : '';
 $msg = '';
 $maxUploadSize = ini_get('upload_max_filesize');
 // compute effective limits
@@ -16,12 +21,20 @@ if (isset($_GET['success']) && $_GET['success'] === '1') {
 }
 
 if ($current_role === 'admin') {
-    $allCourses = $conn->query("SELECT id, course_code, course_name FROM courses ORDER BY course_code");
+    $allCourses = $conn->query("SELECT id, course_code, course_name, semester FROM courses ORDER BY semester IS NULL, semester, course_code");
 } else {
     $allCourses = $conn->query("SELECT id, course_code, course_name FROM courses WHERE lecturer_id = $actor_id ORDER BY course_code");
 }
 $allCourseList = [];
 while ($row = $allCourses->fetch_assoc()) { $allCourseList[] = $row; }
+
+$semesterOptions = [];
+foreach ($allCourseList as $courseRow) {
+    $semester = trim((string)($courseRow['semester'] ?? ''));
+    if ($semester !== '' && !in_array($semester, $semesterOptions, true)) {
+        $semesterOptions[] = $semester;
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
     $delete_material_id = intval($_POST['material_id'] ?? 0);
@@ -161,19 +174,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if ($course_id > 0) {
     if ($current_role === 'admin') {
-        $materials = $conn->query("SELECT m.*, c.course_code FROM materials m JOIN courses c ON m.course_id = c.id WHERE m.course_id = $course_id ORDER BY m.uploaded_at DESC");
+        $materialsQuery = "SELECT m.*, c.course_code, c.course_name, c.semester
+            FROM materials m JOIN courses c ON m.course_id = c.id
+            WHERE m.course_id = " . $course_id;
     } else {
         $idList = count($allCourseList) ? implode(',', array_map(fn($c) => intval($c['id']), $allCourseList)) : '0';
-        $materials = $conn->query("SELECT m.*, c.course_code FROM materials m JOIN courses c ON m.course_id = c.id WHERE m.course_id = $course_id AND m.course_id IN ($idList) ORDER BY m.uploaded_at DESC");
+        $materialsQuery = "SELECT m.*, c.course_code, c.course_name, c.semester
+            FROM materials m JOIN courses c ON m.course_id = c.id
+            WHERE m.course_id = " . $course_id . " AND m.course_id IN ($idList)";
     }
 } else {
     if ($current_role === 'admin') {
-        $materials = $conn->query("SELECT m.*, c.course_code FROM materials m JOIN courses c ON m.course_id = c.id ORDER BY m.uploaded_at DESC");
+        $materialsQuery = "SELECT m.*, c.course_code, c.course_name, c.semester
+            FROM materials m JOIN courses c ON m.course_id = c.id";
     } else {
         $idList = count($allCourseList) ? implode(',', array_map(fn($c) => intval($c['id']), $allCourseList)) : '0';
-        $materials = $conn->query("SELECT m.*, c.course_code FROM materials m JOIN courses c ON m.course_id = c.id WHERE m.course_id IN ($idList) ORDER BY m.uploaded_at DESC");
+        $materialsQuery = "SELECT m.*, c.course_code, c.course_name, c.semester
+            FROM materials m JOIN courses c ON m.course_id = c.id
+            WHERE m.course_id IN ($idList)";
     }
 }
+
+$searchPattern = $conn->real_escape_string('%' . $searchTerm . '%');
+if ($searchTerm !== '') {
+    $materialsQuery .= " AND (m.title LIKE '" . $searchPattern . "' OR c.course_code LIKE '" . $searchPattern . "' OR c.course_name LIKE '" . $searchPattern . "')";
+}
+if ($selectedSemester !== '') {
+    $materialsQuery .= " AND c.semester = '" . $conn->real_escape_string($selectedSemester) . "'";
+}
+if ($selectedType !== '') {
+    $materialsQuery .= " AND m.material_type = '" . $conn->real_escape_string($selectedType) . "'";
+}
+$materialsQuery .= " ORDER BY m.uploaded_at DESC";
+$materials = $conn->query($materialsQuery);
 
 $pageTitle = 'Upload Material';
 $pageEyebrow = ucfirst($current_role);
@@ -215,6 +248,53 @@ include '../includes/header.php';
 
 <div class="card">
     <h3>Uploaded Materials <?php echo $course_id ? '' : '(All Courses)'; ?></h3>
+    <form method="GET" class="filters-bar">
+        <div class="filter-field">
+            <label for="admin-material-search">Search materials</label>
+            <input type="search" id="admin-material-search" name="search"
+                   value="<?php echo htmlspecialchars($searchTerm); ?>"
+                   placeholder="Title, course code or course name">
+        </div>
+        <div class="filter-field">
+            <label for="admin-material-semester">Filter by semester</label>
+            <select id="admin-material-semester" name="semester">
+                <option value="">All Semesters</option>
+                <?php foreach ($semesterOptions as $semester): ?>
+                    <option value="<?php echo htmlspecialchars($semester); ?>" <?php echo $selectedSemester === $semester ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($semester); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="admin-material-course">Filter by course</label>
+            <select id="admin-material-course" name="course_id">
+                <option value="0">All Courses</option>
+                <?php foreach ($allCourseList as $courseOption): ?>
+                    <option value="<?php echo (int)$courseOption['id']; ?>" <?php echo $course_id === (int)$courseOption['id'] ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($courseOption['course_code'] . ' - ' . $courseOption['course_name']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="admin-material-type">Filter by type</label>
+            <select id="admin-material-type" name="material_type_filter">
+                <option value="">All Types</option>
+                <option value="document" <?php echo $selectedType === 'document' ? 'selected' : ''; ?>>Document</option>
+                <option value="video" <?php echo $selectedType === 'video' ? 'selected' : ''; ?>>Video</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn">Search / Filter</button>
+            <?php if ($searchTerm !== '' || $selectedSemester !== '' || $selectedType !== ''): ?>
+                <a href="upload_material.php" class="btn btn-outline">Clear</a>
+            <?php endif; ?>
+        </div>
+    </form>
+    <p class="table-meta">
+        <?php echo $materials->num_rows; ?> material<?php echo $materials->num_rows === 1 ? '' : 's'; ?> found
+    </p>
     <table>
         <tr><th>Title</th><th>Course</th><th>Type</th><th>Uploaded</th><th>File</th><th>Action</th></tr>
         <?php while ($m = $materials->fetch_assoc()): ?>
@@ -228,13 +308,22 @@ include '../includes/header.php';
                 <form method="POST" onsubmit="return confirm('Delete this material?');" style="display:inline;">
                     <input type="hidden" name="delete_material" value="1">
                     <input type="hidden" name="material_id" value="<?php echo (int)$m['id']; ?>">
+                    <input type="hidden" name="search" value="<?php echo htmlspecialchars($searchTerm); ?>">
+                    <input type="hidden" name="semester" value="<?php echo htmlspecialchars($selectedSemester); ?>">
+                    <input type="hidden" name="course_id" value="<?php echo (int)$course_id; ?>">
                     <button type="submit" class="btn">Delete</button>
                 </form>
             </td>
         </tr>
         <?php endwhile; ?>
     </table>
-    <?php if ($materials->num_rows === 0): ?><div class="empty-state">No materials uploaded yet.</div><?php endif; ?>
+    <?php if ($materials->num_rows === 0): ?>
+        <div class="empty-state">
+            <?php echo ($searchTerm !== '' || $selectedSemester !== '' || $selectedType !== '')
+                ? 'No materials match the selected search or filter.'
+                : 'No materials uploaded yet.'; ?>
+        </div>
+    <?php endif; ?>
 </div>
 <a href="dashboard.php" class="btn">Back to Dashboard</a>
 <script>

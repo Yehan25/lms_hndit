@@ -4,6 +4,8 @@ require_role('admin');
 
 $msg = '';
 $editUser = null;
+$searchTerm = trim((string)($_GET['search'] ?? ''));
+$selectedRole = (string)($_GET['role'] ?? '');
 
 // Add lecturer
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_lecturer'])) {
@@ -90,7 +92,36 @@ if (isset($_GET['edit'])) {
     $edit_stmt->close();
 }
 
-$users = $conn->query("SELECT * FROM users ORDER BY role, name");
+$userSql = "SELECT * FROM users WHERE 1=1";
+$userTypes = '';
+$userParams = [];
+
+if ($searchTerm !== '') {
+    $searchPattern = '%' . $searchTerm . '%';
+    $userSql .= " AND (name LIKE ? OR email LIKE ? OR reg_no LIKE ?)";
+    $userTypes .= 'sss';
+    $userParams[] = $searchPattern;
+    $userParams[] = $searchPattern;
+    $userParams[] = $searchPattern;
+}
+
+if (in_array($selectedRole, ['admin', 'lecturer', 'student'], true)) {
+    $userSql .= " AND role = ?";
+    $userTypes .= 's';
+    $userParams[] = $selectedRole;
+}
+
+$userSql .= " ORDER BY role, name";
+$userStmt = $conn->prepare($userSql);
+if (!empty($userParams)) {
+    $bindValues = [$userTypes];
+    foreach ($userParams as $key => $value) {
+        $bindValues[] = &$userParams[$key];
+    }
+    call_user_func_array([$userStmt, 'bind_param'], $bindValues);
+}
+$userStmt->execute();
+$users = $userStmt->get_result();
 
 $pageTitle = 'Manage Users';
 include '../includes/header.php';
@@ -136,6 +167,36 @@ include '../includes/header.php';
 
 <div class="card">
     <h3>All Users</h3>
+    <form method="GET" class="filters-bar">
+        <div class="filter-field">
+            <label for="user-search">Search users</label>
+            <input
+                type="search"
+                id="user-search"
+                name="search"
+                value="<?php echo htmlspecialchars($searchTerm); ?>"
+                placeholder="Name, email or registration no."
+            >
+        </div>
+        <div class="filter-field">
+            <label for="user-role">Filter by role</label>
+            <select id="user-role" name="role">
+                <option value="">All Roles</option>
+                <option value="student" <?php echo $selectedRole === 'student' ? 'selected' : ''; ?>>Student</option>
+                <option value="lecturer" <?php echo $selectedRole === 'lecturer' ? 'selected' : ''; ?>>Lecturer</option>
+                <option value="admin" <?php echo $selectedRole === 'admin' ? 'selected' : ''; ?>>Admin</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn">Search / Filter</button>
+            <?php if ($searchTerm !== '' || $selectedRole !== ''): ?>
+                <a href="manage_users.php" class="btn btn-outline">Clear</a>
+            <?php endif; ?>
+        </div>
+    </form>
+    <p class="table-meta">
+        <?php echo $users->num_rows; ?> user<?php echo $users->num_rows === 1 ? '' : 's'; ?> found
+    </p>
     <table>
         <tr><th>Name</th><th>Email</th><th>Role</th><th>Reg No.</th><th>Reset Password</th><th>Action</th></tr>
         <?php while ($u = $users->fetch_assoc()): ?>
@@ -161,5 +222,12 @@ include '../includes/header.php';
         </tr>
         <?php endwhile; ?>
     </table>
+    <?php if ($users->num_rows === 0): ?>
+        <div class="empty-state">
+            <?php echo ($searchTerm !== '' || $selectedRole !== '')
+                ? 'No users match the selected search or filter.'
+                : 'No users have been created yet.'; ?>
+        </div>
+    <?php endif; ?>
 </div>
 <?php include '../includes/footer.php'; ?>

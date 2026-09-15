@@ -311,6 +311,9 @@ include '../includes/header.php';
                 <form method="POST" onsubmit="return confirm('Delete this material?');" style="display:inline;">
                     <input type="hidden" name="delete_material" value="1">
                     <input type="hidden" name="material_id" value="<?php echo (int)$m['id']; ?>">
+                    <input type="hidden" name="search" value="<?php echo htmlspecialchars($searchTerm); ?>">
+                    <input type="hidden" name="semester" value="<?php echo htmlspecialchars($selectedSemester); ?>">
+                    <input type="hidden" name="course_id" value="<?php echo (int)$course_id; ?>">
                     <button type="submit" class="btn">Delete</button>
                 </form>
             </td>
