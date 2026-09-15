@@ -166,7 +166,10 @@ include '../includes/header.php';
                         · <?php echo $m['uploaded_at']; ?>
                     </div>
                 </div>
-                <a href="/lms_hndit/<?php echo htmlspecialchars($m['file_path']); ?>" target="_blank" class="btn btn-outline">Download</a>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <a href="../material.php?id=<?php echo (int)$m['id']; ?>" target="_blank" class="btn btn-outline">View</a>
+                    <a href="../material.php?id=<?php echo (int)$m['id']; ?>&download=1" class="btn btn-outline">Download</a>
+                </div>
             </div>
             <?php if ($m['material_type'] === 'video'): ?>
                 <video class="material-video" controls preload="metadata">

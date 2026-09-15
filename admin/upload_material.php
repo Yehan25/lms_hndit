@@ -303,7 +303,10 @@ include '../includes/header.php';
             <td class="course-code"><?php echo htmlspecialchars($m['course_code']); ?></td>
             <td><span class="type-tag type-tag-<?php echo $m['material_type']; ?>"><?php echo $m['material_type']; ?></span></td>
             <td><?php echo $m['uploaded_at']; ?></td>
-            <td><a href="/lms_hndit/<?php echo htmlspecialchars($m['file_path']); ?>" target="_blank">Download</a></td>
+            <td>
+                <a href="../material.php?id=<?php echo (int)$m['id']; ?>" target="_blank" class="btn btn-outline">View</a>
+                <a href="../material.php?id=<?php echo (int)$m['id']; ?>&download=1" class="btn btn-outline">Download</a>
+            </td>
             <td>
                 <form method="POST" onsubmit="return confirm('Delete this material?');" style="display:inline;">
                     <input type="hidden" name="delete_material" value="1">
