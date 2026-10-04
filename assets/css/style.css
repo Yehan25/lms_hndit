@@ -1062,6 +1062,109 @@ label { font-weight: 600; font-size: 12.5px; display: block; margin-bottom: 6px;
 
 .empty-state { text-align: center; padding: 30px 10px; color: var(--text-faint); font-size: 13.5px; }
 
+.announcement-list {
+    display: grid;
+    gap: 16px;
+}
+
+.announcement-card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(245,247,255,0.9));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+:root[data-theme="dark"] .announcement-card {
+    background: linear-gradient(180deg, rgba(14,22,38,0.96), rgba(10,17,30,0.9));
+}
+
+.announcement-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.announcement-toggle {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.announcement-toggle__title {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text);
+}
+
+.announcement-toggle__meta {
+    display: block;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.announcement-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(124, 92, 255, 0.12);
+    color: var(--violet);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.announcement-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.announcement-details {
+    padding: 18px;
+    background: rgba(124, 92, 255, 0.03);
+    border-top: 1px solid var(--border);
+}
+
+:root[data-theme="dark"] .announcement-details {
+    background: rgba(124, 92, 255, 0.06);
+}
+
+.announcement-message {
+    margin: 0;
+    line-height: 1.8;
+    color: var(--text);
+    white-space: pre-line;
+}
+
+.announcement-attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.announcement-attachment .btn {
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
 /* ============ STATUS PILLS (assignments / submissions) ============ */
 .pill { padding: 3px 11px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: capitalize; display: inline-block; }
 .pill-submitted { background: #e2f8f2; color: #0d8983; }

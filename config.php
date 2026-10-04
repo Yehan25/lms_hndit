@@ -26,6 +26,11 @@ if ($assignmentFileCol && $assignmentFileCol->num_rows === 0) {
     $conn->query("ALTER TABLE assignments ADD COLUMN file_path VARCHAR(255) NULL AFTER due_date");
 }
 
+$announcementFileCol = $conn->query("SHOW COLUMNS FROM announcements LIKE 'file_path'");
+if ($announcementFileCol && $announcementFileCol->num_rows === 0) {
+    $conn->query("ALTER TABLE announcements ADD COLUMN file_path VARCHAR(255) NULL AFTER message");
+}
+
 // App limit for video uploads (50 MB)
 define('MAX_VIDEO_UPLOAD_BYTES', 50 * 1024 * 1024);
 

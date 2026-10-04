@@ -133,15 +133,29 @@ include '../includes/header.php';
     <h3>Recent Announcements</h3>
     <?php if ($announcements->num_rows === 0): ?>
         <div class="empty-state">No announcements yet.</div>
-    <?php endif; ?>
-    <?php while ($a = $announcements->fetch_assoc()): ?>
-        <div style="border-bottom:1px solid #eee; padding:10px 0;">
-            <strong><?php echo htmlspecialchars($a['title']); ?></strong>
-            <span style="color:var(--text-faint); font-size:12px;"> · <?php echo htmlspecialchars($a['course_name']); ?></span>
-            <p style="margin:6px 0 0 0;"><?php echo nl2br(htmlspecialchars($a['message'])); ?></p>
-            <small style="color:#888;"><?php echo $a['posted_at']; ?></small>
+    <?php else: ?>
+        <div class="announcement-list">
+            <?php while ($a = $announcements->fetch_assoc()): ?>
+                <div class="announcement-card">
+                    <div class="announcement-card__header">
+                        <button type="button" class="announcement-toggle" data-target="announcement-<?php echo (int)$a['id']; ?>" aria-expanded="false">
+                            <span class="announcement-toggle__title"><?php echo htmlspecialchars($a['title']); ?></span>
+                            <span class="announcement-toggle__meta"><?php echo htmlspecialchars($a['course_name']); ?> · <?php echo htmlspecialchars($a['posted_at']); ?></span>
+                        </button>
+                        <span class="announcement-pill">Course</span>
+                    </div>
+                    <div id="announcement-<?php echo (int)$a['id']; ?>" class="announcement-details" hidden>
+                        <p class="announcement-message"><?php echo nl2br(htmlspecialchars($a['message'])); ?></p>
+                        <?php if (!empty($a['file_path'])): ?>
+                            <div class="announcement-attachment">
+                                <a href="/lms_hndit/<?php echo htmlspecialchars($a['file_path']); ?>" target="_blank" class="btn btn-outline">View Attachment</a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endwhile; ?>
         </div>
-    <?php endwhile; ?>
+    <?php endif; ?>
 </div>
 
 <div class="card">
@@ -161,6 +175,27 @@ document.addEventListener('DOMContentLoaded', function() {
         navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
         pagination: { el: '.swiper-pagination', clickable: true },
         speed: 600
+    });
+
+    document.querySelectorAll('.announcement-toggle').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const targetId = this.dataset.target;
+            const panel = document.getElementById(targetId);
+            const isOpen = !panel.hidden;
+
+            document.querySelectorAll('.announcement-details').forEach(function(item) {
+                item.hidden = true;
+            });
+
+            document.querySelectorAll('.announcement-toggle').forEach(function(toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+            });
+
+            if (!isOpen) {
+                panel.hidden = false;
+                this.setAttribute('aria-expanded', 'true');
+            }
+        });
     });
 });
 </script>

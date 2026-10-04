@@ -83,6 +83,10 @@ function nav_active($file, $current) {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                     Assignments
                 </a>
+                <a href="/lms_hndit/lecturer/post_announcement.php" class="nav-link <?php echo nav_active('post_announcement.php', $current); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-5 4v-4H6a2 2 0 0 1-2-2V6z"/><path d="M8 9h8M8 13h6"/></svg>
+                    Announcements
+                </a>
                 <a href="/lms_hndit/admin/manage_quizzes.php" class="nav-link <?php echo nav_active('manage_quizzes.php', $current); ?>">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>
                     Quizzes
@@ -99,6 +103,10 @@ function nav_active($file, $current) {
                 <a href="/lms_hndit/lecturer/create_assignment.php" class="nav-link <?php echo nav_active('create_assignment.php', $current); ?>">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                     Assignments
+                </a>
+                <a href="/lms_hndit/lecturer/post_announcement.php" class="nav-link <?php echo nav_active('post_announcement.php', $current); ?>">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-5 4v-4H6a2 2 0 0 1-2-2V6z"/><path d="M8 9h8M8 13h6"/></svg>
+                    Announcements
                 </a>
                 <a href="/lms_hndit/lecturer/manage_quizzes.php" class="nav-link <?php echo nav_active('manage_quizzes.php', $current); ?>">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>
